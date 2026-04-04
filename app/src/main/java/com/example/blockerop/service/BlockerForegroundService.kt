@@ -16,6 +16,8 @@ import android.os.Looper
 import com.example.blockerop.MainActivity
 import com.example.blockerop.R
 import com.example.blockerop.data.BlockerPreferences
+import com.example.blockerop.data.NewsFetcher
+import com.example.blockerop.data.NewsCache
 import com.example.blockerop.overlay.BlockOverlayManager
 import com.example.blockerop.scheduler.BlockSchedule
 
@@ -40,6 +42,20 @@ class BlockerForegroundService : Service() {
         startForeground(NOTIFICATION_ID, buildNotification(),
             ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
         startPolling()
+        refreshNewsInBackground()
+    }
+
+    // ── News refresh ──────────────────────────────────────────────────────────
+
+    private fun refreshNewsInBackground() {
+        Thread {
+            try {
+                val articles = NewsFetcher.fetchHeadlines()
+                if (articles.isNotEmpty()) NewsCache.update(articles)
+            } catch (_: Exception) { }
+            // Refresh again in 30 minutes
+            handler.postDelayed({ refreshNewsInBackground() }, 30 * 60 * 1_000L)
+        }.start()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

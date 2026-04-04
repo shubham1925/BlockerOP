@@ -4,6 +4,9 @@
 
     <!-- ── Permissions ──────────────────────────────────────────────────────── -->
 
+    <!-- Fetch live breaking news for the blocked screen -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <!-- Draw the blocking overlay on top of other apps -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 

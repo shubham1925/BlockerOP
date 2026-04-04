@@ -125,7 +125,7 @@ fun SetupWizard(context: Context, resumeKey: Int = 0, onSetupComplete: () -> Uni
     val steps = listOf(
         SetupStep(
             title = "Welcome to BlockerOP",
-            description = "This app will block Instagram and Facebook for all hours of the day except 9 PM – 10 PM.\n\nTo do this, it needs three special permissions. The next screens will guide you through each one.",
+            description = "This app blocks Instagram and Facebook outside your chosen access window. You decide the hours — once set up, it enforces them automatically.\n\nTo do this, it needs three special permissions. The next screens will guide you through each one.",
             buttonLabel = "Get Started",
             isGranted = { true },
             grant = {}

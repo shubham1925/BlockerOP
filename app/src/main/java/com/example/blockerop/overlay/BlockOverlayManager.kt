@@ -1,10 +1,12 @@
 package com.example.blockerop.overlay
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.util.TypedValue
@@ -15,6 +17,7 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.example.blockerop.data.BlockerPreferences
+import com.example.blockerop.data.NewsCache
 import com.example.blockerop.scheduler.BlockSchedule
 
 object BlockOverlayManager {
@@ -65,12 +68,16 @@ object BlockOverlayManager {
     // ── Content ───────────────────────────────────────────────────────────────
 
     private enum class Category(val label: String, val emoji: String, val color: Int) {
-        BREAKING_NEWS("BREAKING NEWS", "🚨", Color.parseColor("#FF3B30")),
-        FUN_FACT     ("FUN FACT",      "💡", Color.parseColor("#0A84FF")),
-        JOKE         ("JOKE",          "😂", Color.parseColor("#FF9F0A")),
+        BREAKING_NEWS("BREAKING NEWS", "🚨", Color.parseColor("#C0392B")),
+        FUN_FACT     ("FUN FACT",      "💡", Color.parseColor("#2471A3")),
+        JOKE         ("JOKE",          "😂", Color.parseColor("#B7950B")),
     }
 
-    private data class ContentItem(val category: Category, val text: String)
+    private data class ContentItem(
+        val category: Category,
+        val text: String,
+        val url: String? = null
+    )
 
     private val CONTENT = listOf(
         // Breaking news
@@ -119,30 +126,33 @@ object BlockOverlayManager {
     // ── View building ─────────────────────────────────────────────────────────
 
     private fun buildOverlayView(context: Context): FrameLayout {
-        val item = CONTENT.random()
+        val item = if (NewsCache.hasArticles() && Math.random() < 0.70) {
+            val article = NewsCache.getRandomArticle()!!
+            ContentItem(Category.BREAKING_NEWS, article.title, article.url)
+        } else {
+            CONTENT.random()
+        }
         val prefs = BlockerPreferences(context)
         val windowText = "${BlockSchedule.formatMinutes(prefs.allowStartMinutes)} – ${BlockSchedule.formatMinutes(prefs.allowEndMinutes)}"
 
         return FrameLayout(context).apply {
-            // Dark gradient background
             background = GradientDrawable(
                 GradientDrawable.Orientation.TL_BR,
                 intArrayOf(
-                    Color.parseColor("#0A0818"),
-                    Color.parseColor("#140D2E"),
-                    Color.parseColor("#0A0818")
+                    Color.parseColor("#06080F"),
+                    Color.parseColor("#0D1117"),
+                    Color.parseColor("#06080F")
                 )
             )
             isClickable = true
             isFocusable = true
 
-            // Centered content card
             addView(buildCard(context, item, windowText), FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 Gravity.CENTER
             ).apply {
-                val h = dp(context, 32)
+                val h = dp(context, 28)
                 setMargins(h, h, h, h)
             })
         }
@@ -154,9 +164,9 @@ object BlockOverlayManager {
             gravity = Gravity.CENTER
             setPadding(dp(context, 28), dp(context, 36), dp(context, 28), dp(context, 32))
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#1C1535"))
-                cornerRadius = dp(context, 24).toFloat()
-                setStroke(dp(context, 1), Color.parseColor("#3D2F6B"))
+                setColor(Color.parseColor("#0F1319"))
+                cornerRadius = dp(context, 20).toFloat()
+                setStroke(dp(context, 1), Color.parseColor("#1E2533"))
             }
 
             // Category chip
@@ -165,29 +175,37 @@ object BlockOverlayManager {
             // Main content text
             addView(TextView(context).apply {
                 text = item.text
-                textSize = 20f
-                setTextColor(Color.WHITE)
+                textSize = 19f
+                setTextColor(Color.parseColor("#E8E0D0"))
                 gravity = Gravity.CENTER
-                typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
-                setLineSpacing(0f, 1.4f)
-                setPadding(0, dp(context, 24), 0, dp(context, 28))
+                typeface = Typeface.create("serif", Typeface.NORMAL)
+                setLineSpacing(0f, 1.45f)
+                setPadding(0, dp(context, 24), 0, dp(context, 24))
             })
+
+            // "Read full story" link — only for real news with a URL
+            if (item.url != null) {
+                addView(buildReadMoreLink(context, item.url, item.category.color))
+            }
 
             // Divider
             addView(View(context).apply {
-                setBackgroundColor(Color.parseColor("#2E2557"))
+                setBackgroundColor(Color.parseColor("#1A2030"))
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT, dp(context, 1)
-                ).apply { bottomMargin = dp(context, 20) }
+                ).apply {
+                    topMargin = if (item.url != null) dp(context, 16) else 0
+                    bottomMargin = dp(context, 20)
+                }
             })
 
             // Access window label
             addView(TextView(context).apply {
                 text = "ACCESS WINDOW  $windowText"
                 textSize = 11f
-                setTextColor(Color.parseColor("#6B5FA0"))
+                setTextColor(Color.parseColor("#4A5568"))
                 gravity = Gravity.CENTER
-                letterSpacing = 0.10f
+                letterSpacing = 0.12f
                 setPadding(0, 0, 0, dp(context, 4))
             })
 
@@ -195,7 +213,7 @@ object BlockOverlayManager {
             addView(TextView(context).apply {
                 tag = TAG_COUNTDOWN
                 textSize = 13f
-                setTextColor(Color.parseColor("#8B7FB3"))
+                setTextColor(Color.parseColor("#6B7280"))
                 gravity = Gravity.CENTER
                 letterSpacing = 0.08f
             })
@@ -208,18 +226,18 @@ object BlockOverlayManager {
     private fun buildCategoryChip(context: Context, category: Category): TextView {
         return TextView(context).apply {
             text = "${category.emoji}  ${category.label}"
-            textSize = 11f
+            textSize = 10f
             setTextColor(category.color)
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            letterSpacing = 0.12f
+            letterSpacing = 0.14f
             gravity = Gravity.CENTER
-            val hPad = dp(context, 16)
-            val vPad = dp(context, 7)
+            val hPad = dp(context, 14)
+            val vPad = dp(context, 6)
             setPadding(hPad, vPad, hPad, vPad)
             background = GradientDrawable().apply {
                 cornerRadius = dp(context, 20).toFloat()
-                setColor(adjustAlpha(category.color, 0.15f))
-                setStroke(dp(context, 1), adjustAlpha(category.color, 0.4f))
+                setColor(adjustAlpha(category.color, 0.10f))
+                setStroke(dp(context, 1), adjustAlpha(category.color, 0.35f))
             }
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -228,20 +246,45 @@ object BlockOverlayManager {
         }
     }
 
+    private fun buildReadMoreLink(context: Context, url: String, accentColor: Int): TextView {
+        return TextView(context).apply {
+            text = "Read full story  →"
+            textSize = 13f
+            setTextColor(adjustAlpha(accentColor, 0.85f))
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            gravity = Gravity.CENTER
+            letterSpacing = 0.04f
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                topMargin = dp(context, 4)
+            }
+            setOnClickListener {
+                hide()
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                try { context.applicationContext.startActivity(intent) } catch (_: Exception) { }
+            }
+        }
+    }
+
     private fun buildOkButton(context: Context, accentColor: Int): TextView {
         return TextView(context).apply {
             text = "OK, GOT IT"
-            textSize = 14f
-            setTextColor(Color.WHITE)
+            textSize = 13f
+            setTextColor(Color.parseColor("#C9D1D9"))
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            letterSpacing = 0.1f
+            letterSpacing = 0.12f
             gravity = Gravity.CENTER
-            val vPad = dp(context, 16)
+            val vPad = dp(context, 15)
             setPadding(0, vPad, 0, vPad)
             background = GradientDrawable().apply {
-                setColor(adjustAlpha(accentColor, 0.25f))
-                cornerRadius = dp(context, 14).toFloat()
-                setStroke(dp(context, 1), adjustAlpha(accentColor, 0.6f))
+                setColor(Color.parseColor("#161B22"))
+                cornerRadius = dp(context, 12).toFloat()
+                setStroke(dp(context, 1), adjustAlpha(accentColor, 0.45f))
             }
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,

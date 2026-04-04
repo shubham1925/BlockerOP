@@ -30,7 +30,8 @@ class BlockerPreferences(context: Context) {
 
         val BLOCKED_PACKAGES = setOf(
             "com.instagram.android",
-            "com.facebook.katana"
+            "com.facebook.katana",
+            "com.google.android.apps.photos" // kept for testing
         )
     }
 }
