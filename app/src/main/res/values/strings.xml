@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">BlockerOP</string>
+    <string name="accessibility_service_description">BlockerOP monitors which app is in the foreground so it can block social media apps outside the allowed time window.</string>
+</resources>

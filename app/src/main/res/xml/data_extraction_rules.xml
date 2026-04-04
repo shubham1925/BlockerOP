@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<data-extraction-rules>
+
+    <!--
+        Cloud backup (Google account) — survives full uninstall + reinstall.
+        Restored automatically the first time the new version launches.
+    -->
+    <cloud-backup>
+        <!-- Analytics event log -->
+        <include domain="file"      path="app_events.csv"/>
+        <!-- User settings (blocked-hours schedule, setup-complete flag) -->
+        <include domain="sharedpref" path="blocker_prefs"/>
+    </cloud-backup>
+
+    <!--
+        Device-to-device transfer (e.g. phone upgrade via cable/QR).
+    -->
+    <device-transfer>
+        <include domain="file"      path="app_events.csv"/>
+        <include domain="sharedpref" path="blocker_prefs"/>
+    </device-transfer>
+
+</data-extraction-rules>
