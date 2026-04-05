@@ -47,6 +47,7 @@ private val APP_DISPLAY_NAMES = mapOf(
 fun AnalyticsScreen(context: Context, onBack: () -> Unit) {
     var selectedTab by remember { mutableIntStateOf(0) }
     val events = remember { EventLogger.readAll(context) }
+    val prefs  = remember { BlockerPreferences(context) }
 
     Scaffold(
         topBar = {
@@ -72,8 +73,72 @@ fun AnalyticsScreen(context: Context, onBack: () -> Unit) {
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                if (selectedTab == 0) DailyContent(events)
-                else WeeklyContent(events)
+                InsightsCard(events)
+                if (selectedTab == 0) DailyContent(events, prefs)
+                else WeeklyContent(events, prefs)
+            }
+        }
+    }
+}
+
+// ── Insights card ─────────────────────────────────────────────────────────────
+
+@Composable
+private fun InsightsCard(events: List<AppOpenEvent>) {
+    val allBlocked = remember(events) { events.filter { it.wasBlocked } }
+
+    val peakHour: Int? = remember(allBlocked) {
+        if (allBlocked.isEmpty()) null
+        else {
+            val byHour = IntArray(24)
+            allBlocked.forEach { e ->
+                val h = Calendar.getInstance().apply { timeInMillis = e.timestampMs }
+                    .get(Calendar.HOUR_OF_DAY)
+                byHour[h]++
+            }
+            byHour.indices.maxByOrNull { byHour[it] }
+        }
+    }
+
+    val worstDay: String? = remember(allBlocked) {
+        if (allBlocked.isEmpty()) null
+        else {
+            val dayNames = arrayOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
+            val byDay = IntArray(7)
+            allBlocked.forEach { e ->
+                val d = Calendar.getInstance().apply { timeInMillis = e.timestampMs }
+                    .get(Calendar.DAY_OF_WEEK) - 1
+                byDay[d]++
+            }
+            dayNames[byDay.indices.maxByOrNull { byDay[it] }!!]
+        }
+    }
+
+    if (peakHour == null && worstDay == null) return
+
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)) {
+
+            Text("Insights", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+
+            if (peakHour != null) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("🕐", fontSize = 14.sp)
+                    Text("Peak temptation: ${formatHour(peakHour)}",
+                        fontSize = 13.sp, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                }
+            }
+            if (worstDay != null) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("📅", fontSize = 14.sp)
+                    Text("Weakest day: $worstDay",
+                        fontSize = 13.sp, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                }
             }
         }
     }
@@ -82,34 +147,28 @@ fun AnalyticsScreen(context: Context, onBack: () -> Unit) {
 // ── Daily tab ─────────────────────────────────────────────────────────────────
 
 @Composable
-private fun DailyContent(events: List<AppOpenEvent>) {
+private fun DailyContent(events: List<AppOpenEvent>, prefs: BlockerPreferences) {
     val todayStart = startOfDay(daysAgo = 0)
     val todayEvents = events.filter { it.timestampMs >= todayStart }
 
-    // x-axis: 24 hours, label only the readable ones
     val hourLabels = (0 until 24).map { h ->
         when (h) { 0 -> "12a"; 6 -> "6a"; 12 -> "12p"; 18 -> "6p"; 23 -> "11p"; else -> "" }
     }
 
-    Text(
-        "Today",
-        fontWeight = FontWeight.Bold,
-        fontSize = 13.sp,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
+    Text("Today", fontWeight = FontWeight.Bold, fontSize = 13.sp,
+        color = MaterialTheme.colorScheme.onSurfaceVariant)
 
-    for (pkg in BlockerPreferences.BLOCKED_PACKAGES) {
+    for (pkg in prefs.blockedPackages.sorted()) {
         val pkgEvents = todayEvents.filter { it.packageName == pkg }
         val blocked = IntArray(24)
         val allowed = IntArray(24)
         for (e in pkgEvents) {
             val hour = Calendar.getInstance()
-                .apply { timeInMillis = e.timestampMs }
-                .get(Calendar.HOUR_OF_DAY)
+                .apply { timeInMillis = e.timestampMs }.get(Calendar.HOUR_OF_DAY)
             if (e.wasBlocked) blocked[hour]++ else allowed[hour]++
         }
         AppStatCard(
-            appName      = APP_DISPLAY_NAMES[pkg] ?: pkg,
+            appName      = APP_DISPLAY_NAMES[pkg] ?: appShortName(pkg),
             totalBlocked = pkgEvents.count { it.wasBlocked },
             totalAllowed = pkgEvents.count { !it.wasBlocked },
             blockedData  = blocked.toList(),
@@ -122,11 +181,10 @@ private fun DailyContent(events: List<AppOpenEvent>) {
 // ── Weekly tab ────────────────────────────────────────────────────────────────
 
 @Composable
-private fun WeeklyContent(events: List<AppOpenEvent>) {
+private fun WeeklyContent(events: List<AppOpenEvent>, prefs: BlockerPreferences) {
     val weekStart = startOfDay(daysAgo = 6)
     val weekEvents = events.filter { it.timestampMs >= weekStart }
 
-    // Labels: [6-days-ago … today], index 0 = oldest
     val dayLabels = (6 downTo 0).map { daysAgo ->
         if (daysAgo == 0) "Today"
         else SimpleDateFormat("EEE", Locale.getDefault()).format(
@@ -134,25 +192,19 @@ private fun WeeklyContent(events: List<AppOpenEvent>) {
         )
     }
 
-    Text(
-        "Last 7 days",
-        fontWeight = FontWeight.Bold,
-        fontSize = 13.sp,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
+    Text("Last 7 days", fontWeight = FontWeight.Bold, fontSize = 13.sp,
+        color = MaterialTheme.colorScheme.onSurfaceVariant)
 
-    for (pkg in BlockerPreferences.BLOCKED_PACKAGES) {
+    for (pkg in prefs.blockedPackages.sorted()) {
         val pkgEvents = weekEvents.filter { it.packageName == pkg }
         val blocked = IntArray(7)
         val allowed = IntArray(7)
         for (e in pkgEvents) {
-            // day 0 = 6 days ago, day 6 = today
-            val dayIdx = ((e.timestampMs - weekStart) / 86_400_000L)
-                .toInt().coerceIn(0, 6)
+            val dayIdx = ((e.timestampMs - weekStart) / 86_400_000L).toInt().coerceIn(0, 6)
             if (e.wasBlocked) blocked[dayIdx]++ else allowed[dayIdx]++
         }
         AppStatCard(
-            appName      = APP_DISPLAY_NAMES[pkg] ?: pkg,
+            appName      = APP_DISPLAY_NAMES[pkg] ?: appShortName(pkg),
             totalBlocked = pkgEvents.count { it.wasBlocked },
             totalAllowed = pkgEvents.count { !it.wasBlocked },
             blockedData  = blocked.toList(),
@@ -179,40 +231,24 @@ private fun AppStatCard(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
-
-            // Header row: app name + totals
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(appName, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                Text(
-                    "${totalBlocked + totalAllowed} total",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Text("${totalBlocked + totalAllowed} total", fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-
-            // Legend
-            Row(
-                modifier = Modifier.padding(top = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
+            Row(modifier = Modifier.padding(top = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 LegendDot(COLOR_BLOCKED, "$totalBlocked blocked")
                 LegendDot(COLOR_ALLOWED, "$totalAllowed allowed")
             }
-
             Spacer(Modifier.height(12.dp))
-
-            // Chart or empty state
             if (totalBlocked == 0 && totalAllowed == 0) {
-                Box(
-                    Modifier.fillMaxWidth().height(90.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("No data yet",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                Box(Modifier.fillMaxWidth().height(90.dp), contentAlignment = Alignment.Center) {
+                    Text("No data yet", color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 13.sp)
                 }
             } else {
@@ -231,9 +267,7 @@ private fun AppStatCard(
 private fun LegendDot(color: Color, label: String) {
     Row(verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        Canvas(Modifier.size(8.dp)) {
-            drawCircle(color)
-        }
+        Canvas(Modifier.size(8.dp)) { drawCircle(color) }
         Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
@@ -256,43 +290,29 @@ private fun TimeChart(
         val padRight  = 8.dp.toPx()
         val padTop    = 8.dp.toPx()
         val padBottom = 24.dp.toPx()
-
         val drawW = size.width  - padLeft - padRight
         val drawH = size.height - padTop  - padBottom
         val n     = xLabels.size
         val step  = drawW / (n - 1).coerceAtLeast(1).toFloat()
 
-        fun xAt(i: Int)  = padLeft + i * step
-        fun yAt(v: Int)  = padTop + drawH - (v / maxVal) * drawH
+        fun xAt(i: Int) = padLeft + i * step
+        fun yAt(v: Int) = padTop + drawH - (v / maxVal) * drawH
 
-        // ── Horizontal grid lines (4 evenly spaced) ───────────────────────────
         repeat(4) { row ->
             val y = padTop + drawH * row / 3f
-            drawLine(
-                COLOR_GRID,
-                Offset(padLeft, y),
-                Offset(padLeft + drawW, y),
-                strokeWidth = 1.dp.toPx()
-            )
+            drawLine(COLOR_GRID, Offset(padLeft, y), Offset(padLeft + drawW, y),
+                strokeWidth = 1.dp.toPx())
         }
 
-        // ── Draw one data series ───────────────────────────────────────────────
         fun drawSeries(data: List<Int>, color: Color) {
             if (data.isEmpty()) return
-
-            // Polyline
             val path = Path()
             data.forEachIndexed { i, v ->
                 val x = xAt(i); val y = yAt(v)
                 if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
             }
-            drawPath(path, color, style = Stroke(
-                width = 2.dp.toPx(),
-                cap   = StrokeCap.Round,
-                join  = StrokeJoin.Round
-            ))
-
-            // Dots at non-zero data points
+            drawPath(path, color, style = Stroke(width = 2.dp.toPx(),
+                cap = StrokeCap.Round, join = StrokeJoin.Round))
             data.forEachIndexed { i, v ->
                 if (v > 0) {
                     val cx = xAt(i); val cy = yAt(v)
@@ -302,21 +322,16 @@ private fun TimeChart(
             }
         }
 
-        // Draw blocked behind allowed so green dots are on top where they overlap
         drawSeries(blockedData, COLOR_BLOCKED)
         drawSeries(allowedData, COLOR_ALLOWED)
 
-        // ── X-axis labels ─────────────────────────────────────────────────────
         xLabels.forEachIndexed { i, label ->
             if (label.isNotEmpty()) {
                 val measured = textMeasurer.measure(label, labelStyle)
-                drawText(
-                    measured,
-                    topLeft = Offset(
-                        xAt(i) - measured.size.width / 2f,
-                        padTop + drawH + 4.dp.toPx()
-                    )
-                )
+                drawText(measured, topLeft = Offset(
+                    xAt(i) - measured.size.width / 2f,
+                    padTop + drawH + 4.dp.toPx()
+                ))
             }
         }
     }
@@ -327,8 +342,15 @@ private fun TimeChart(
 private fun startOfDay(daysAgo: Int): Long =
     Calendar.getInstance().apply {
         add(Calendar.DAY_OF_YEAR, -daysAgo)
-        set(Calendar.HOUR_OF_DAY, 0)
-        set(Calendar.MINUTE, 0)
-        set(Calendar.SECOND, 0)
-        set(Calendar.MILLISECOND, 0)
+        set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0);      set(Calendar.MILLISECOND, 0)
     }.timeInMillis
+
+private fun formatHour(hour: Int): String {
+    val h = if (hour % 12 == 0) 12 else hour % 12
+    val ampm = if (hour < 12) "AM" else "PM"
+    return "$h $ampm"
+}
+
+/** Converts "com.example.someapp" → "someapp" as a readable fallback label. */
+private fun appShortName(pkg: String) = pkg.substringAfterLast('.')

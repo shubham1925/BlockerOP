@@ -28,10 +28,14 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import com.example.blockerop.data.BlockerPreferences
 import com.example.blockerop.data.EventLogger
+import com.example.blockerop.data.StreakManager
 import com.example.blockerop.scheduler.BlockSchedule
+import com.example.blockerop.scheduler.WeeklyReportScheduler
 import com.example.blockerop.service.BlockerForegroundService
 import com.example.blockerop.service.GuardJobService
 import com.example.blockerop.ui.AnalyticsScreen
+import com.example.blockerop.ui.ManageAppsScreen
+import com.example.blockerop.ui.UninstallProtectionScreen
 import com.example.blockerop.ui.theme.BlockerOPTheme
 
 class MainActivity : ComponentActivity() {
@@ -56,6 +60,11 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         resumeKey++
+        // Update streak once per day
+        val prefs = BlockerPreferences(this)
+        if (prefs.isSetupComplete) {
+            StreakManager.refresh(prefs, EventLogger.readAll(this))
+        }
     }
 }
 
@@ -91,7 +100,9 @@ fun allPermissionsGranted(context: Context) =
 fun BlockerApp(resumeKey: Int = 0) {
     val context = LocalContext.current
     val prefs = remember { BlockerPreferences(context) }
-    var showAnalytics by remember { mutableStateOf(false) }
+    var showAnalytics   by remember { mutableStateOf(false) }
+    var showManageApps  by remember { mutableStateOf(false) }
+    var showUninstall   by remember { mutableStateOf(false) }
 
     val allGranted = remember(resumeKey) { allPermissionsGranted(context) }
 
@@ -99,8 +110,20 @@ fun BlockerApp(resumeKey: Int = 0) {
         showAnalytics -> {
             AnalyticsScreen(context, onBack = { showAnalytics = false })
         }
+        showManageApps -> {
+            ManageAppsScreen(onBack = { showManageApps = false })
+        }
+        showUninstall -> {
+            UninstallProtectionScreen(resumeKey = resumeKey, onBack = { showUninstall = false })
+        }
         prefs.isSetupComplete && allGranted -> {
-            StatusScreen(context, resumeKey, onShowAnalytics = { showAnalytics = true })
+            StatusScreen(
+                context          = context,
+                resumeKey        = resumeKey,
+                onShowAnalytics  = { showAnalytics  = true },
+                onManageApps     = { showManageApps = true },
+                onUninstall      = { showUninstall  = true }
+            )
         }
         else -> {
             SetupWizard(
@@ -110,6 +133,7 @@ fun BlockerApp(resumeKey: Int = 0) {
                     prefs.isSetupComplete = true
                     BlockerForegroundService.start(context)
                     GuardJobService.schedule(context)
+                    WeeklyReportScheduler.schedule(context)
                 }
             )
         }
@@ -274,15 +298,18 @@ private fun StatusBadge(granted: Boolean) {
 // ── Status screen ─────────────────────────────────────────────────────────────
 
 @Composable
-fun StatusScreen(context: Context, resumeKey: Int = 0, onShowAnalytics: () -> Unit = {}) {
+fun StatusScreen(
+    context: Context,
+    resumeKey: Int = 0,
+    onShowAnalytics: () -> Unit = {},
+    onManageApps: () -> Unit = {},
+    onUninstall: () -> Unit = {}
+) {
     val prefs = remember { BlockerPreferences(context) }
     var showDialog by remember { mutableStateOf(false) }
 
-    // Refreshed each time the dialog closes or onResume fires
-    var windowLabel by remember(resumeKey) {
-        mutableStateOf(buildWindowLabel(prefs))
-    }
-
+    var windowLabel by remember(resumeKey) { mutableStateOf(buildWindowLabel(prefs)) }
+    var streak      by remember(resumeKey) { mutableIntStateOf(prefs.streakDays) }
     val allOk = remember(resumeKey) { allPermissionsGranted(context) }
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -300,15 +327,18 @@ fun StatusScreen(context: Context, resumeKey: Int = 0, onShowAnalytics: () -> Un
                 color = if (allOk) Color(0xFF2E7D32) else Color(0xFFB71C1C)
             )
 
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(8.dp))
 
-            Text(
-                text = "Instagram · Facebook",
-                fontSize = 13.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            Spacer(Modifier.height(6.dp))
+            // Streak badge
+            if (streak > 0) {
+                Text(
+                    text = "🔥 $streak day${if (streak == 1) "" else "s"} clean",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color(0xFFE65100)
+                )
+                Spacer(Modifier.height(4.dp))
+            }
 
             Text(
                 text = "Access window: $windowLabel",
@@ -321,9 +351,7 @@ fun StatusScreen(context: Context, resumeKey: Int = 0, onShowAnalytics: () -> Un
 
             Button(
                 onClick = { showDialog = true },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp)
+                modifier = Modifier.fillMaxWidth().height(52.dp)
             ) {
                 Text("Configure Slots")
             }
@@ -331,12 +359,28 @@ fun StatusScreen(context: Context, resumeKey: Int = 0, onShowAnalytics: () -> Un
             Spacer(Modifier.height(8.dp))
 
             OutlinedButton(
+                onClick = onManageApps,
+                modifier = Modifier.fillMaxWidth().height(52.dp)
+            ) {
+                Text("Manage Blocked Apps")
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            OutlinedButton(
                 onClick = onShowAnalytics,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp)
+                modifier = Modifier.fillMaxWidth().height(52.dp)
             ) {
                 Text("Analytics")
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            OutlinedButton(
+                onClick = onUninstall,
+                modifier = Modifier.fillMaxWidth().height(52.dp)
+            ) {
+                Text("Uninstall Protection")
             }
 
             if (!allOk) {

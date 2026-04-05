@@ -22,13 +22,40 @@ class BlockerPreferences(context: Context) {
         get() = prefs.getInt(KEY_END, 1320)
         set(value) = prefs.edit().putInt(KEY_END, value).apply()
 
-    companion object {
-        private const val PREFS_NAME = "blocker_prefs"
-        private const val KEY_SETUP_COMPLETE = "setup_complete"
-        private const val KEY_START = "allow_start_minutes"
-        private const val KEY_END = "allow_end_minutes"
+    /** The set of package names currently being blocked. */
+    var blockedPackages: Set<String>
+        get() = prefs.getStringSet(KEY_BLOCKED_PKGS, DEFAULT_BLOCKED_PACKAGES)!!.toSet()
+        set(value) = prefs.edit().putStringSet(KEY_BLOCKED_PKGS, value).apply()
 
-        val BLOCKED_PACKAGES = setOf(
+    /** Number of consecutive clean days (zero blocked attempts during blocked hours). */
+    var streakDays: Int
+        get() = prefs.getInt(KEY_STREAK_DAYS, 0)
+        set(value) = prefs.edit().putInt(KEY_STREAK_DAYS, value).apply()
+
+    /** ISO date string (yyyy-MM-dd) of the last day streak was evaluated. */
+    var streakLastCheckedDate: String
+        get() = prefs.getString(KEY_STREAK_DATE, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_STREAK_DATE, value).apply()
+
+    /**
+     * Epoch ms when the user submitted an uninstall request (after typing the phrase).
+     * 0L = no request pending.
+     */
+    var uninstallRequestedAt: Long
+        get() = prefs.getLong(KEY_UNINSTALL_REQUESTED, 0L)
+        set(value) = prefs.edit().putLong(KEY_UNINSTALL_REQUESTED, value).apply()
+
+    companion object {
+        private const val PREFS_NAME          = "blocker_prefs"
+        private const val KEY_SETUP_COMPLETE  = "setup_complete"
+        private const val KEY_START           = "allow_start_minutes"
+        private const val KEY_END             = "allow_end_minutes"
+        private const val KEY_BLOCKED_PKGS    = "blocked_packages"
+        private const val KEY_STREAK_DAYS          = "streak_days"
+        private const val KEY_STREAK_DATE          = "streak_last_checked"
+        private const val KEY_UNINSTALL_REQUESTED  = "uninstall_requested_at"
+
+        val DEFAULT_BLOCKED_PACKAGES = setOf(
             "com.instagram.android",
             "com.facebook.katana",
             "com.google.android.apps.photos" // kept for testing

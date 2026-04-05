@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Being an active Device Admin is enough to prevent uninstall from Settings > Apps.
+    No specific policies are required for that behaviour.
+-->
+<device-admin>
+    <uses-policies />
+</device-admin>

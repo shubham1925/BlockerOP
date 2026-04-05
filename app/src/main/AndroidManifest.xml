@@ -22,8 +22,18 @@
         android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />
 
-    <!-- Schedule exact alarm for service self-restart -->
+    <!-- Schedule exact alarm for service self-restart and weekly report -->
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+
+    <!-- Post weekly summary notifications (required on Android 13+) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Query installed app labels and icons for the Manage Blocked Apps screen.
+         Required on Android 11+ due to package visibility restrictions — without
+         this, getApplicationInfo/getApplicationIcon throw NameNotFoundException
+         for apps not explicitly listed in <queries>. -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="QueryAllPackagesPermission" />
 
     <!-- Required for JobScheduler setPersisted(true) -->
     <!-- (already covered by RECEIVE_BOOT_COMPLETED, listed here for clarity) -->
@@ -101,6 +111,34 @@
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
+
+        <!-- ── Weekly Report Receiver ─────────────────────────────────────── -->
+        <receiver
+            android:name=".receiver.WeeklyReportReceiver"
+            android:exported="false" />
+
+        <!-- ── Uninstall Ready Receiver ───────────────────────────────────── -->
+        <receiver
+            android:name=".receiver.UninstallReadyReceiver"
+            android:exported="false" />
+
+        <!-- ── Device Admin Receiver ──────────────────────────────────────── -->
+        <!--
+             Being an active Device Admin prevents the user from uninstalling
+             BlockerOP via Settings > Apps. The only in-app exit path is the
+             24-hour cooldown flow.
+        -->
+        <receiver
+            android:name=".receiver.BlockerDeviceAdminReceiver"
+            android:exported="true"
+            android:permission="android.permission.BIND_DEVICE_ADMIN">
+            <meta-data
+                android:name="android.app.device_admin"
+                android:resource="@xml/device_admin" />
+            <intent-filter>
+                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
             </intent-filter>
         </receiver>
 

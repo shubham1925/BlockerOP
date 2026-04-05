@@ -33,6 +33,7 @@ class BlockerForegroundService : Service() {
 
     private val handler = Handler(Looper.getMainLooper())
     private var pollRunnable: Runnable? = null
+    private lateinit var prefs: BlockerPreferences
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -41,6 +42,7 @@ class BlockerForegroundService : Service() {
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, buildNotification(),
             ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        prefs = BlockerPreferences(applicationContext)
         startPolling()
         refreshNewsInBackground()
     }
@@ -80,7 +82,6 @@ class BlockerForegroundService : Service() {
 
     private fun startPolling() {
         val usm = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
-        val prefs = BlockerPreferences(applicationContext)
 
         val runnable = object : Runnable {
             override fun run() {
@@ -110,7 +111,7 @@ class BlockerForegroundService : Service() {
             ?.maxByOrNull { it.lastTimeUsed }
             ?.packageName ?: return
 
-        if (foregroundPkg in BlockerPreferences.BLOCKED_PACKAGES) {
+        if (foregroundPkg in prefs.blockedPackages) {
             if (!BlockOverlayManager.isShowing()) {
                 BlockOverlayManager.show(applicationContext)
             }

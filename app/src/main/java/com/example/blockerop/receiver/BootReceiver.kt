@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import com.example.blockerop.data.BlockerPreferences
+import com.example.blockerop.scheduler.WeeklyReportScheduler
 import com.example.blockerop.service.BlockerForegroundService
 import com.example.blockerop.service.GuardJobService
 
@@ -20,6 +21,7 @@ class BootReceiver : BroadcastReceiver() {
         if (BlockerPreferences(context).isSetupComplete) {
             BlockerForegroundService.start(context)
             GuardJobService.schedule(context)
+            WeeklyReportScheduler.schedule(context)
         }
     }
 }
