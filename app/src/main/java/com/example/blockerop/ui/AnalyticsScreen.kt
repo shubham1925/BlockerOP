@@ -2,14 +2,20 @@ package com.example.blockerop.ui
 
 import android.content.Context
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -25,53 +31,91 @@ import androidx.compose.ui.unit.sp
 import com.example.blockerop.data.AppOpenEvent
 import com.example.blockerop.data.BlockerPreferences
 import com.example.blockerop.data.EventLogger
+import com.example.blockerop.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 
-// ── Constants ─────────────────────────────────────────────────────────────────
-
-private val COLOR_BLOCKED = Color(0xFFE53935)
-private val COLOR_ALLOWED = Color(0xFF43A047)
-private val COLOR_GRID    = Color(0x1A000000)
+private val COLOR_BLOCKED = Emerald
+private val COLOR_ALLOWED = Amber
+private val COLOR_GRID    = Color(0x12FFFFFF)
 
 private val APP_DISPLAY_NAMES = mapOf(
     "com.instagram.android" to "Instagram",
     "com.facebook.katana"   to "Facebook"
 )
 
-// ── Root screen ───────────────────────────────────────────────────────────────
-
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AnalyticsScreen(context: Context, onBack: () -> Unit) {
     var selectedTab by remember { mutableIntStateOf(0) }
     val events = remember { EventLogger.readAll(context) }
     val prefs  = remember { BlockerPreferences(context) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Analytics") },
-                navigationIcon = {
-                    TextButton(onClick = onBack) { Text("← Back") }
+    Surface(modifier = Modifier.fillMaxSize(), color = BgDeep) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            // ── Top bar ───────────────────────────────────────────────────────
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 8.dp)
+                    .padding(top = 40.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = TextMid)
                 }
-            )
-        }
-    ) { padding ->
-        Column(modifier = Modifier.padding(padding)) {
-            TabRow(selectedTabIndex = selectedTab) {
-                Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 },
-                    text = { Text("Daily") })
-                Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 },
-                    text = { Text("Weekly") })
+                Text(
+                    "Analytics",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextHigh,
+                    modifier = Modifier.padding(start = 4.dp)
+                )
+            }
+
+            // ── Tab selector ──────────────────────────────────────────────────
+            Box(
+                modifier = Modifier
+                    .padding(horizontal = 20.dp, vertical = 8.dp)
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(BgCard)
+                    .border(1.dp, BorderSubtle, RoundedCornerShape(12.dp))
+                    .padding(4.dp)
+            ) {
+                Row {
+                    listOf("Daily", "Weekly").forEachIndexed { idx, label ->
+                        val selected = selectedTab == idx
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(9.dp))
+                                .background(if (selected) BgElevated else Color.Transparent)
+                                .then(
+                                    if (selected) Modifier.border(1.dp, BorderMid, RoundedCornerShape(9.dp))
+                                    else Modifier
+                                )
+                                .clickable { selectedTab = idx }
+                                .padding(vertical = 10.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                label,
+                                fontSize = 14.sp,
+                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                                color = if (selected) TextHigh else TextMid
+                            )
+                        }
+                    }
+                }
             }
 
             Column(
                 modifier = Modifier
                     .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 32.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 InsightsCard(events)
                 if (selectedTab == 0) DailyContent(events, prefs)
@@ -100,7 +144,7 @@ private fun InsightsCard(events: List<AppOpenEvent>) {
         }
     }
 
-    val worstDay: String? = remember(allBlocked) {
+    val bestDay: String? = remember(allBlocked) {
         if (allBlocked.isEmpty()) null
         else {
             val dayNames = arrayOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
@@ -114,30 +158,28 @@ private fun InsightsCard(events: List<AppOpenEvent>) {
         }
     }
 
-    if (peakHour == null && worstDay == null) return
+    if (peakHour == null && bestDay == null) return
 
-    Card(
-        shape = RoundedCornerShape(16.dp),
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(BgCard)
+            .border(1.dp, BorderSubtle, RoundedCornerShape(16.dp))
+            .padding(horizontal = 16.dp, vertical = 14.dp)
     ) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)) {
-
-            Text("Insights", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Insights", fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = TextMid)
             if (peakHour != null) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("🕐", fontSize = 14.sp)
-                    Text("Peak temptation: ${formatHour(peakHour)}",
-                        fontSize = 13.sp, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("🛡️", fontSize = 14.sp)
+                    Text("You resist most at ${formatHour(peakHour)}", fontSize = 14.sp, color = TextHigh)
                 }
             }
-            if (worstDay != null) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("📅", fontSize = 14.sp)
-                    Text("Weakest day: $worstDay",
-                        fontSize = 13.sp, color = MaterialTheme.colorScheme.onSecondaryContainer)
+            if (bestDay != null) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("🏆", fontSize = 14.sp)
+                    Text("Strongest day: $bestDay", fontSize = 14.sp, color = TextHigh)
                 }
             }
         }
@@ -155,16 +197,14 @@ private fun DailyContent(events: List<AppOpenEvent>, prefs: BlockerPreferences) 
         when (h) { 0 -> "12a"; 6 -> "6a"; 12 -> "12p"; 18 -> "6p"; 23 -> "11p"; else -> "" }
     }
 
-    Text("Today", fontWeight = FontWeight.Bold, fontSize = 13.sp,
-        color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text("Today", fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = TextLow,
+        modifier = Modifier.padding(top = 4.dp))
 
     for (pkg in prefs.blockedPackages.sorted()) {
         val pkgEvents = todayEvents.filter { it.packageName == pkg }
-        val blocked = IntArray(24)
-        val allowed = IntArray(24)
+        val blocked = IntArray(24); val allowed = IntArray(24)
         for (e in pkgEvents) {
-            val hour = Calendar.getInstance()
-                .apply { timeInMillis = e.timestampMs }.get(Calendar.HOUR_OF_DAY)
+            val hour = Calendar.getInstance().apply { timeInMillis = e.timestampMs }.get(Calendar.HOUR_OF_DAY)
             if (e.wasBlocked) blocked[hour]++ else allowed[hour]++
         }
         AppStatCard(
@@ -192,13 +232,12 @@ private fun WeeklyContent(events: List<AppOpenEvent>, prefs: BlockerPreferences)
         )
     }
 
-    Text("Last 7 days", fontWeight = FontWeight.Bold, fontSize = 13.sp,
-        color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text("Last 7 days", fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = TextLow,
+        modifier = Modifier.padding(top = 4.dp))
 
     for (pkg in prefs.blockedPackages.sorted()) {
         val pkgEvents = weekEvents.filter { it.packageName == pkg }
-        val blocked = IntArray(7)
-        val allowed = IntArray(7)
+        val blocked = IntArray(7); val allowed = IntArray(7)
         for (e in pkgEvents) {
             val dayIdx = ((e.timestampMs - weekStart) / 86_400_000L).toInt().coerceIn(0, 6)
             if (e.wasBlocked) blocked[dayIdx]++ else allowed[dayIdx]++
@@ -225,31 +264,35 @@ private fun AppStatCard(
     allowedData: List<Int>,
     xLabels: List<String>
 ) {
-    Card(
-        shape = RoundedCornerShape(16.dp),
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(BgCard)
+            .border(1.dp, BorderSubtle, RoundedCornerShape(16.dp))
+            .padding(horizontal = 16.dp, vertical = 14.dp)
     ) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+        Column {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(appName, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                Text("${totalBlocked + totalAllowed} total", fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(appName, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = TextHigh)
+                Text(
+                    "${totalBlocked + totalAllowed} opens",
+                    fontSize = 12.sp, color = TextLow
+                )
             }
-            Row(modifier = Modifier.padding(top = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                LegendDot(COLOR_BLOCKED, "$totalBlocked blocked")
-                LegendDot(COLOR_ALLOWED, "$totalAllowed allowed")
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                StatPill(COLOR_BLOCKED, "$totalBlocked resisted", EmeraldDim)
+                StatPill(COLOR_ALLOWED, "$totalAllowed opened", AmberDim)
             }
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(14.dp))
             if (totalBlocked == 0 && totalAllowed == 0) {
                 Box(Modifier.fillMaxWidth().height(90.dp), contentAlignment = Alignment.Center) {
-                    Text("No data yet", color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 13.sp)
+                    Text("No activity today", color = TextLow, fontSize = 13.sp)
                 }
             } else {
                 TimeChart(
@@ -264,11 +307,17 @@ private fun AppStatCard(
 }
 
 @Composable
-private fun LegendDot(color: Color, label: String) {
-    Row(verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        Canvas(Modifier.size(8.dp)) { drawCircle(color) }
-        Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+private fun StatPill(color: Color, label: String, bg: Color) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(bg)
+            .padding(horizontal = 10.dp, vertical = 5.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Canvas(Modifier.size(6.dp)) { drawCircle(color) }
+            Text(label, fontSize = 12.sp, color = color, fontWeight = FontWeight.Medium)
+        }
     }
 }
 
@@ -283,7 +332,7 @@ private fun TimeChart(
 ) {
     val textMeasurer = rememberTextMeasurer()
     val maxVal = maxOf(blockedData.maxOrNull() ?: 0, allowedData.maxOrNull() ?: 0, 1).toFloat()
-    val labelStyle = TextStyle(fontSize = 9.sp, color = Color(0xFF888888))
+    val labelStyle = TextStyle(fontSize = 9.sp, color = TextLow)
 
     Canvas(modifier = modifier) {
         val padLeft   = 8.dp.toPx()
@@ -300,8 +349,7 @@ private fun TimeChart(
 
         repeat(4) { row ->
             val y = padTop + drawH * row / 3f
-            drawLine(COLOR_GRID, Offset(padLeft, y), Offset(padLeft + drawW, y),
-                strokeWidth = 1.dp.toPx())
+            drawLine(COLOR_GRID, Offset(padLeft, y), Offset(padLeft + drawW, y), strokeWidth = 1.dp.toPx())
         }
 
         fun drawSeries(data: List<Int>, color: Color) {
@@ -311,13 +359,12 @@ private fun TimeChart(
                 val x = xAt(i); val y = yAt(v)
                 if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
             }
-            drawPath(path, color, style = Stroke(width = 2.dp.toPx(),
-                cap = StrokeCap.Round, join = StrokeJoin.Round))
+            drawPath(path, color, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
             data.forEachIndexed { i, v ->
                 if (v > 0) {
                     val cx = xAt(i); val cy = yAt(v)
-                    drawCircle(color,       radius = 4.dp.toPx(), center = Offset(cx, cy))
-                    drawCircle(Color.White, radius = 2.dp.toPx(), center = Offset(cx, cy))
+                    drawCircle(color,        radius = 4.dp.toPx(), center = Offset(cx, cy))
+                    drawCircle(Color(0xFF0F1728), radius = 2.dp.toPx(), center = Offset(cx, cy))
                 }
             }
         }
@@ -328,10 +375,7 @@ private fun TimeChart(
         xLabels.forEachIndexed { i, label ->
             if (label.isNotEmpty()) {
                 val measured = textMeasurer.measure(label, labelStyle)
-                drawText(measured, topLeft = Offset(
-                    xAt(i) - measured.size.width / 2f,
-                    padTop + drawH + 4.dp.toPx()
-                ))
+                drawText(measured, topLeft = Offset(xAt(i) - measured.size.width / 2f, padTop + drawH + 4.dp.toPx()))
             }
         }
     }
@@ -348,9 +392,7 @@ private fun startOfDay(daysAgo: Int): Long =
 
 private fun formatHour(hour: Int): String {
     val h = if (hour % 12 == 0) 12 else hour % 12
-    val ampm = if (hour < 12) "AM" else "PM"
-    return "$h $ampm"
+    return "$h ${if (hour < 12) "AM" else "PM"}"
 }
 
-/** Converts "com.example.someapp" → "someapp" as a readable fallback label. */
 private fun appShortName(pkg: String) = pkg.substringAfterLast('.')
