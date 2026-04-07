@@ -45,6 +45,11 @@ class BlockerPreferences(context: Context) {
         get() = prefs.getLong(KEY_UNINSTALL_REQUESTED, 0L)
         set(value) = prefs.edit().putLong(KEY_UNINSTALL_REQUESTED, value).apply()
 
+    /** Epoch ms when the user last saved a schedule change. 0L = never changed. */
+    var lastScheduleChangedAt: Long
+        get() = prefs.getLong(KEY_SCHEDULE_CHANGED, 0L)
+        set(value) = prefs.edit().putLong(KEY_SCHEDULE_CHANGED, value).apply()
+
     companion object {
         private const val PREFS_NAME          = "blocker_prefs"
         private const val KEY_SETUP_COMPLETE  = "setup_complete"
@@ -54,6 +59,7 @@ class BlockerPreferences(context: Context) {
         private const val KEY_STREAK_DAYS          = "streak_days"
         private const val KEY_STREAK_DATE          = "streak_last_checked"
         private const val KEY_UNINSTALL_REQUESTED  = "uninstall_requested_at"
+        private const val KEY_SCHEDULE_CHANGED     = "schedule_changed_at"
 
         val DEFAULT_BLOCKED_PACKAGES = setOf(
             "com.instagram.android",

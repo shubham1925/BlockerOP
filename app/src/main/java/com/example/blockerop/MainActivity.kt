@@ -600,6 +600,14 @@ fun ConfigureSlotsDialog(prefs: BlockerPreferences, onDismiss: () -> Unit, onSav
     val durationMinutes = (endIdx - startIdx) * 30
     val isValid = endIdx > startIdx && durationMinutes <= 120
 
+    val cooldownMs = 48L * 60 * 60 * 1000
+    val msSinceChange = System.currentTimeMillis() - prefs.lastScheduleChangedAt
+    val onCooldown = prefs.lastScheduleChangedAt > 0L && msSinceChange < cooldownMs
+    val msRemaining = if (onCooldown) cooldownMs - msSinceChange else 0L
+    val hoursLeft = (msRemaining / (1000 * 60 * 60)).toInt()
+    val minutesLeft = ((msRemaining % (1000 * 60 * 60)) / (1000 * 60)).toInt()
+    val canSave = isValid && !onCooldown
+
     Dialog(onDismissRequest = onDismiss) {
         Box(
             modifier = Modifier
@@ -671,21 +679,35 @@ fun ConfigureSlotsDialog(prefs: BlockerPreferences, onDismiss: () -> Unit, onSav
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(10.dp))
-                        .background(if (isValid) EmeraldDim else RoseDim)
+                        .background(
+                            when {
+                                onCooldown -> AmberDim
+                                isValid    -> EmeraldDim
+                                else       -> RoseDim
+                            }
+                        )
                         .padding(horizontal = 16.dp, vertical = 10.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (isValid) {
-                        val h = durationMinutes / 60
-                        val m = durationMinutes % 60
-                        val label = when {
-                            h > 0 && m > 0 -> "${h}h ${m}m window"
-                            h > 0 -> "${h}h window"
-                            else  -> "${m}m window"
+                    when {
+                        onCooldown -> Text(
+                            "Locked for ${hoursLeft}h ${minutesLeft}m — change limit: once per 48h",
+                            fontSize = 13.sp,
+                            color = Amber,
+                            fontWeight = FontWeight.Medium,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                        isValid -> {
+                            val h = durationMinutes / 60
+                            val m = durationMinutes % 60
+                            val label = when {
+                                h > 0 && m > 0 -> "${h}h ${m}m window"
+                                h > 0 -> "${h}h window"
+                                else  -> "${m}m window"
+                            }
+                            Text(label, fontSize = 13.sp, color = Emerald, fontWeight = FontWeight.Medium)
                         }
-                        Text(label, fontSize = 13.sp, color = Emerald, fontWeight = FontWeight.Medium)
-                    } else {
-                        Text(
+                        else -> Text(
                             if (endIdx <= startIdx) "End time must be after start" else "Maximum window is 2 hours",
                             fontSize = 13.sp,
                             color = Rose,
@@ -711,12 +733,13 @@ fun ConfigureSlotsDialog(prefs: BlockerPreferences, onDismiss: () -> Unit, onSav
                             .height(48.dp)
                             .clip(RoundedCornerShape(12.dp))
                             .background(
-                                if (isValid) Brush.linearGradient(listOf(Indigo, Color(0xFF8B5CF6)))
+                                if (canSave) Brush.linearGradient(listOf(Indigo, Color(0xFF8B5CF6)))
                                 else Brush.linearGradient(listOf(BorderMid, BorderMid))
                             )
-                            .clickable(enabled = isValid) {
+                            .clickable(enabled = canSave) {
                                 prefs.allowStartMinutes = startIdx * 30
                                 prefs.allowEndMinutes   = endIdx   * 30
+                                prefs.lastScheduleChangedAt = System.currentTimeMillis()
                                 onSaved()
                                 onDismiss()
                             },
@@ -724,7 +747,7 @@ fun ConfigureSlotsDialog(prefs: BlockerPreferences, onDismiss: () -> Unit, onSav
                     ) {
                         Text(
                             "Save",
-                            color = if (isValid) Color.White else TextLow,
+                            color = if (canSave) Color.White else TextLow,
                             fontWeight = FontWeight.SemiBold
                         )
                     }
