@@ -1,6 +1,7 @@
 package com.example.blockerop.overlay
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.Typeface
@@ -23,19 +24,21 @@ import android.widget.TextView
  */
 object FrictionOverlayManager {
 
-    private const val COUNTDOWN_SECONDS = 60
+    private const val COUNTDOWN_SECONDS = 10
     private const val TAG_COUNTDOWN     = "friction_countdown"
     private const val TAG_PROCEED       = "friction_proceed"
     private const val TAG_TIMER_LABEL   = "friction_timer_label"
 
     private var overlayView: View? = null
     private var windowManager: WindowManager? = null
+    private var appContext: Context? = null
     private val handler = Handler(Looper.getMainLooper())
     private var timerRunnable: Runnable? = null
 
     fun show(context: Context) {
         if (overlayView != null) return
         val appCtx = context.applicationContext
+        appContext = appCtx
         val wm = appCtx.getSystemService(Context.WINDOW_SERVICE) as WindowManager
         val layout = buildView(appCtx)
         val params = WindowManager.LayoutParams(
@@ -62,6 +65,7 @@ object FrictionOverlayManager {
         try { windowManager?.removeView(view) } catch (_: Exception) { }
         overlayView = null
         windowManager = null
+        appContext = null
     }
 
     fun isShowing(): Boolean = overlayView != null
@@ -247,8 +251,22 @@ object FrictionOverlayManager {
             setTextColor(Color.parseColor("#475569"))
             gravity = Gravity.CENTER
             setPadding(0, dp(context, 14), 0, 0)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
             visibility = View.GONE
-            setOnClickListener { hide() }
+            setOnClickListener {
+                val ctx = appContext
+                hide()
+                if (ctx != null) {
+                    val intent = Intent(ctx, Class.forName("${ctx.packageName}.MainActivity")).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                        putExtra("show_uninstall", true)
+                    }
+                    try { ctx.startActivity(intent) } catch (_: Exception) { }
+                }
+            }
         }
     }
 

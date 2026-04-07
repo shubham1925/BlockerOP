@@ -56,15 +56,24 @@ import com.example.blockerop.ui.theme.*
 class MainActivity : ComponentActivity() {
 
     private var resumeKey by mutableStateOf(0)
+    private var openUninstall by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        openUninstall = intent.getBooleanExtra(EXTRA_SHOW_UNINSTALL, false)
         EventLogger.restoreFromBackupIfNeeded(this)
         enableEdgeToEdge()
         setContent {
             BlockerOPTheme {
-                BlockerApp(resumeKey)
+                BlockerApp(resumeKey, openUninstall)
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        if (intent.getBooleanExtra(EXTRA_SHOW_UNINSTALL, false)) {
+            openUninstall = true
         }
     }
 
@@ -75,6 +84,10 @@ class MainActivity : ComponentActivity() {
         if (prefs.isSetupComplete) {
             StreakManager.refresh(prefs, EventLogger.readAll(this))
         }
+    }
+
+    companion object {
+        const val EXTRA_SHOW_UNINSTALL = "show_uninstall"
     }
 }
 
@@ -107,12 +120,12 @@ fun allPermissionsGranted(context: Context) =
 // ── Top-level composable ──────────────────────────────────────────────────────
 
 @Composable
-fun BlockerApp(resumeKey: Int = 0) {
+fun BlockerApp(resumeKey: Int = 0, openUninstall: Boolean = false) {
     val context = LocalContext.current
     val prefs = remember { BlockerPreferences(context) }
     var showAnalytics  by remember { mutableStateOf(false) }
     var showManageApps by remember { mutableStateOf(false) }
-    var showUninstall  by remember { mutableStateOf(false) }
+    var showUninstall  by remember { mutableStateOf(openUninstall) }
 
     val allGranted = remember(resumeKey) { allPermissionsGranted(context) }
 

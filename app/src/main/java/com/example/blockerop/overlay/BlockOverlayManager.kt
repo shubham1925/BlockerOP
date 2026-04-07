@@ -66,8 +66,6 @@ object BlockOverlayManager {
 
     private enum class Category(val label: String, val emoji: String, val color: Int) {
         BREAKING_NEWS("BREAKING NEWS", "🚨", Color.parseColor("#EF4444")),
-        FUN_FACT     ("FUN FACT",      "💡", Color.parseColor("#6366F1")),
-        JOKE         ("JOKE",          "😄", Color.parseColor("#F59E0B")),
     }
 
     private data class ContentItem(
@@ -83,22 +81,12 @@ object BlockOverlayManager {
         ContentItem(Category.BREAKING_NEWS, "Breaking: Infinite scroll confirmed to have been intentionally designed to be addictive. Experts baffled nobody noticed sooner."),
         ContentItem(Category.BREAKING_NEWS, "Man discovers extra hour in his day after deleting social media. Shocked to learn it was there the whole time."),
         ContentItem(Category.BREAKING_NEWS, "App you were just trying to open has no new information since 4 minutes ago. Developing story."),
-        ContentItem(Category.FUN_FACT, "Instagram was bought by Facebook for \$1 billion in 2012. Your attention was the actual product they acquired."),
-        ContentItem(Category.FUN_FACT, "The average person spends 2 hours and 27 minutes on social media every day. That's 37 full days per year."),
-        ContentItem(Category.FUN_FACT, "A goldfish has a 9-second attention span. Thanks to social media, humans now average 8 seconds. The goldfish is winning."),
-        ContentItem(Category.FUN_FACT, "The \"pull to refresh\" gesture was designed to mimic a slot machine lever. Your brain gets the same dopamine hit."),
-        ContentItem(Category.FUN_FACT, "Reading a physical book for 6 minutes reduces stress levels by 68%, more than walking or listening to music."),
-        ContentItem(Category.FUN_FACT, "The notification red badge color was specifically chosen because red triggers urgency in the human brain."),
-        ContentItem(Category.JOKE, "Why did the influencer stare at the orange juice carton?\n\nIt said \"concentrate.\""),
-        ContentItem(Category.JOKE, "I told my therapist I was addicted to social media.\n\nShe said I should talk about it.\n\nSo I posted a thread."),
-        ContentItem(Category.JOKE, "My phone asked me to rate my experience.\n\nI gave it 3 stars.\n\nIt immediately suggested 4 similar apps."),
-        ContentItem(Category.JOKE, "I tried a digital detox.\n\nDay 1: peaceful.\nDay 2: productive.\nDay 3: I named a spider and taught him tricks."),
     )
 
     // ── View building ─────────────────────────────────────────────────────────
 
     private fun buildOverlayView(context: Context): FrameLayout {
-        val item = if (NewsCache.hasArticles() && Math.random() < 0.70) {
+        val item = if (NewsCache.hasArticles()) {
             val article = NewsCache.getRandomArticle()!!
             ContentItem(Category.BREAKING_NEWS, article.title, article.url)
         } else {
