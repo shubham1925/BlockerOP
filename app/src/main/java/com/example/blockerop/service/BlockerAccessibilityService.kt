@@ -92,22 +92,18 @@ class BlockerAccessibilityService : AccessibilityService() {
      * Returns a non-null reason string when the current screen is the Device Admin
      * deactivation screen, or null if it's safe to ignore.
      *
-     * Uses three independent signals so OEM variants are covered:
-     *  1. event.className contains "DeviceAdmin" (most reliable — class name is set
-     *     before the view hierarchy is populated, so it works even if rootInActiveWindow
-     *     is still loading)
-     *  2. rootInActiveWindow searched for "Deactivate" node text (covers the button label
-     *     "Deactivate & uninstall" visible in the screenshot)
-     *  3. rootInActiveWindow full-text contains "deactivate" + "blockerop" (belt-and-braces)
+     * Uses two independent signals so OEM variants are covered:
+     *  1. rootInActiveWindow searched for "Deactivate & uninstall" node text (covers the
+     *     button label visible in the screenshot)
+     *  2. rootInActiveWindow full-text contains "deactivate & uninstall" (belt-and-braces
+     *     for locale variants)
      */
     private fun isDeactivatingAdminScreen(pkg: String, className: String): String? {
-        // Signal 1: class name — works on AOSP and most OEMs, fires immediately
-        if (className.contains("DeviceAdmin", ignoreCase = true)) {
-            Log.d(TAG, "  Signal 1 hit: className=$className")
-            return "className:$className"
-        }
-
-        // Only proceed with node-tree checks for settings packages
+        // Only proceed with node-tree checks for settings packages.
+        // Note: we intentionally do NOT short-circuit on className containing "DeviceAdmin"
+        // because that class name appears on both the activation *and* deactivation screens,
+        // which causes a false positive when the user returns from enabling Device Admin or
+        // navigates back through Settings after approving the accessibility service.
         if (!pkg.contains("settings", ignoreCase = true) &&
             !pkg.equals("android", ignoreCase = true)) return null
 
@@ -118,19 +114,19 @@ class BlockerAccessibilityService : AccessibilityService() {
         }
 
         return try {
-            // Signal 2: look for the exact button text on the Device Admin removal screen.
+            // Signal 1: look for the exact button text on the Device Admin removal screen.
             // "Deactivate & uninstall" only appears on that specific screen — not on the
             // Accessibility settings page or the Device Admins list.
             val deactivateAndUninstallNodes = root.findAccessibilityNodeInfosByText("Deactivate & uninstall")
-            val signal2 = deactivateAndUninstallNodes.isNotEmpty()
+            val signal1 = deactivateAndUninstallNodes.isNotEmpty()
             deactivateAndUninstallNodes.forEach { it.recycle() }
 
-            if (signal2) {
-                Log.d(TAG, "  Signal 2 hit: found 'Deactivate & uninstall' button")
+            if (signal1) {
+                Log.d(TAG, "  Signal 1 hit: found 'Deactivate & uninstall' button")
                 return "findByText"
             }
 
-            // Signal 3: exact phrase fallback (covers locale variants of the button label)
+            // Signal 2: exact phrase fallback (covers locale variants of the button label)
             val fullText = collectNodeText(root).lowercase()
             Log.d(TAG, "  Full text (first 200): ${fullText.take(200)}")
             if (fullText.contains("deactivate & uninstall")) {
