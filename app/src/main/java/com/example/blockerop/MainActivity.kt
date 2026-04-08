@@ -126,6 +126,7 @@ fun BlockerApp(resumeKey: Int = 0, openUninstall: Boolean = false) {
     var showAnalytics  by remember { mutableStateOf(false) }
     var showManageApps by remember { mutableStateOf(false) }
     var showUninstall  by remember { mutableStateOf(openUninstall) }
+    var isSetupComplete by remember { mutableStateOf(prefs.isSetupComplete) }
 
     val allGranted = remember(resumeKey) { allPermissionsGranted(context) }
 
@@ -133,7 +134,7 @@ fun BlockerApp(resumeKey: Int = 0, openUninstall: Boolean = false) {
         showAnalytics -> AnalyticsScreen(context, onBack = { showAnalytics = false })
         showManageApps -> ManageAppsScreen(onBack = { showManageApps = false })
         showUninstall -> UninstallProtectionScreen(resumeKey = resumeKey, onBack = { showUninstall = false })
-        prefs.isSetupComplete && allGranted -> {
+        isSetupComplete && allGranted -> {
             StatusScreen(
                 context         = context,
                 resumeKey       = resumeKey,
@@ -148,6 +149,7 @@ fun BlockerApp(resumeKey: Int = 0, openUninstall: Boolean = false) {
                 resumeKey = resumeKey,
                 onSetupComplete = {
                     prefs.isSetupComplete = true
+                    isSetupComplete = true
                     BlockerForegroundService.start(context)
                     GuardJobService.schedule(context)
                     WeeklyReportScheduler.schedule(context)
