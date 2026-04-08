@@ -208,6 +208,7 @@ private fun DailyContent(events: List<AppOpenEvent>, prefs: BlockerPreferences) 
             if (e.wasBlocked) blocked[hour]++ else allowed[hour]++
         }
         AppStatCard(
+            packageName  = pkg,
             appName      = APP_DISPLAY_NAMES[pkg] ?: appShortName(pkg),
             totalBlocked = pkgEvents.count { it.wasBlocked },
             totalAllowed = pkgEvents.count { !it.wasBlocked },
@@ -243,6 +244,7 @@ private fun WeeklyContent(events: List<AppOpenEvent>, prefs: BlockerPreferences)
             if (e.wasBlocked) blocked[dayIdx]++ else allowed[dayIdx]++
         }
         AppStatCard(
+            packageName  = pkg,
             appName      = APP_DISPLAY_NAMES[pkg] ?: appShortName(pkg),
             totalBlocked = pkgEvents.count { it.wasBlocked },
             totalAllowed = pkgEvents.count { !it.wasBlocked },
@@ -257,6 +259,7 @@ private fun WeeklyContent(events: List<AppOpenEvent>, prefs: BlockerPreferences)
 
 @Composable
 private fun AppStatCard(
+    packageName: String,
     appName: String,
     totalBlocked: Int,
     totalAllowed: Int,
@@ -278,7 +281,13 @@ private fun AppStatCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(appName, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = TextHigh)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    AppIcon(packageName = packageName, size = 24)
+                    Text(appName, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = TextHigh)
+                }
                 Text(
                     "${totalBlocked + totalAllowed} opens",
                     fontSize = 12.sp, color = TextLow
@@ -395,4 +404,4 @@ private fun formatHour(hour: Int): String {
     return "$h ${if (hour < 12) "AM" else "PM"}"
 }
 
-private fun appShortName(pkg: String) = pkg.substringAfterLast('.')
+private fun appShortName(pkg: String) = pkg.substringAfterLast('.').replaceFirstChar { it.uppercaseChar() }

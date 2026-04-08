@@ -1,6 +1,8 @@
 package com.example.blockerop.service
 
 import android.accessibilityservice.AccessibilityService
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
@@ -21,6 +23,8 @@ class BlockerAccessibilityService : AccessibilityService() {
     private lateinit var prefs: BlockerPreferences
     private var lastLoggedPkg  = ""
     private var lastLoggedTime = 0L
+    private val handler = Handler(Looper.getMainLooper())
+    private var pendingAdminCheck: Runnable? = null
 
     override fun onServiceConnected() {
         isRunning = true
@@ -42,16 +46,31 @@ class BlockerAccessibilityService : AccessibilityService() {
             val reason = isDeactivatingAdminScreen(pkg, className)
             Log.d(TAG, "Admin active — deactivation check for $pkg → $reason")
             if (reason != null) {
-                Log.d(TAG, "INTERCEPTING deactivation attempt: $reason")
-                // Click Cancel programmatically — this closes the screen in the
-                // same frame and is much faster than GLOBAL_ACTION_HOME.
-                clickCancel()
-                // HOME is a belt-and-braces fallback in case Cancel wasn't found
-                performGlobalAction(GLOBAL_ACTION_HOME)
-                if (!FrictionOverlayManager.isShowing()) {
-                    FrictionOverlayManager.show(applicationContext)
-                }
+                blockDeactivationAttempt(reason)
                 return
+            }
+            // rootInActiveWindow may not be populated yet on the first event for a
+            // settings screen. Schedule retries so we catch the case where the node
+            // tree loads a moment after the window-state event fires.
+            if (pkg.contains("settings", ignoreCase = true) ||
+                pkg.equals("android", ignoreCase = true)) {
+                pendingAdminCheck?.let { handler.removeCallbacks(it) }
+                fun scheduleCheck(delayMs: Long, nextDelayMs: Long?) {
+                    val r = Runnable {
+                        if (isAdminActive(applicationContext)) {
+                            val retryReason = isDeactivatingAdminScreen(pkg, className)
+                            Log.d(TAG, "Admin retry check ($delayMs ms) for $pkg → $retryReason")
+                            if (retryReason != null) {
+                                blockDeactivationAttempt(retryReason)
+                            } else if (nextDelayMs != null) {
+                                scheduleCheck(nextDelayMs, null)
+                            }
+                        }
+                    }
+                    pendingAdminCheck = r
+                    handler.postDelayed(r, delayMs)
+                }
+                scheduleCheck(300, 700)
             }
         }
 
@@ -75,38 +94,60 @@ class BlockerAccessibilityService : AccessibilityService() {
     }
 
     override fun onInterrupt() {
+        pendingAdminCheck?.let { handler.removeCallbacks(it) }
+        pendingAdminCheck = null
         BlockOverlayManager.hide()
         FrictionOverlayManager.hide()
     }
 
     override fun onDestroy() {
         isRunning = false
+        pendingAdminCheck?.let { handler.removeCallbacks(it) }
+        pendingAdminCheck = null
         BlockOverlayManager.hide()
         FrictionOverlayManager.hide()
         super.onDestroy()
+    }
+
+    private fun blockDeactivationAttempt(reason: String) {
+        Log.d(TAG, "INTERCEPTING deactivation attempt: $reason")
+        pendingAdminCheck?.let { handler.removeCallbacks(it) }
+        pendingAdminCheck = null
+        // Click Cancel programmatically — closes the screen in the same frame.
+        clickCancel()
+        // HOME is a belt-and-braces fallback in case Cancel wasn't found.
+        performGlobalAction(GLOBAL_ACTION_HOME)
+        if (!FrictionOverlayManager.isShowing()) {
+            FrictionOverlayManager.show(applicationContext)
+        }
     }
 
     // ── Admin deactivation detection ──────────────────────────────────────────
 
     /**
      * Returns a non-null reason string when the current screen is the Device Admin
-     * deactivation screen, or null if it's safe to ignore.
+     * deactivation screen for BlockerOP, or null if it is safe to ignore.
      *
-     * Uses two independent signals so OEM variants are covered:
-     *  1. rootInActiveWindow searched for "Deactivate & uninstall" node text (covers the
-     *     button label visible in the screenshot)
-     *  2. rootInActiveWindow full-text contains "deactivate & uninstall" (belt-and-braces
-     *     for locale variants)
+     * Uses two layers of detection:
+     *  1. className — The DeviceAdminAdd activity is the Android screen for
+     *     adding OR removing a device admin. When isAdminActive() is already true
+     *     (checked by the caller), reaching this activity means the user is
+     *     removing the admin. This works even when rootInActiveWindow is null.
+     *  2. rootInActiveWindow text — looks for "deactivate" + "blockerop" in the
+     *     node tree as a secondary signal for OEM-specific screens.
      */
     private fun isDeactivatingAdminScreen(pkg: String, className: String): String? {
-        // Only proceed with node-tree checks for settings packages.
-        // Note: we intentionally do NOT short-circuit on className containing "DeviceAdmin"
-        // because that class name appears on both the activation *and* deactivation screens,
-        // which causes a false positive when the user returns from enabling Device Admin or
-        // navigates back through Settings after approving the accessibility service.
         if (!pkg.contains("settings", ignoreCase = true) &&
             !pkg.equals("android", ignoreCase = true)) return null
 
+        // Signal 1: DeviceAdminAdd is the specific activity Android opens for
+        // add/remove of a device admin. Works immediately — no node tree needed.
+        if (className.endsWith("DeviceAdminAdd", ignoreCase = true)) {
+            Log.d(TAG, "  Signal 1 hit: className=$className (admin already active → deactivation)")
+            return "className:$className"
+        }
+
+        // Signal 2: fall back to node-tree inspection for OEM variants.
         val root = rootInActiveWindow
         if (root == null) {
             Log.d(TAG, "  rootInActiveWindow is null for $pkg")
@@ -114,24 +155,17 @@ class BlockerAccessibilityService : AccessibilityService() {
         }
 
         return try {
-            // Signal 1: look for the exact button text on the Device Admin removal screen.
-            // "Deactivate & uninstall" only appears on that specific screen — not on the
-            // Accessibility settings page or the Device Admins list.
-            val deactivateAndUninstallNodes = root.findAccessibilityNodeInfosByText("Deactivate & uninstall")
-            val signal1 = deactivateAndUninstallNodes.isNotEmpty()
-            deactivateAndUninstallNodes.forEach { it.recycle() }
-
-            if (signal1) {
-                Log.d(TAG, "  Signal 1 hit: found 'Deactivate & uninstall' button")
-                return "findByText"
-            }
-
-            // Signal 2: exact phrase fallback (covers locale variants of the button label)
             val fullText = collectNodeText(root).lowercase()
-            Log.d(TAG, "  Full text (first 200): ${fullText.take(200)}")
-            if (fullText.contains("deactivate & uninstall")) {
-                "fullText"
-            } else null
+            Log.d(TAG, "  Full text (first 300): ${fullText.take(300)}")
+
+            // Must be about BlockerOP — prevents blocking deactivation of other admin apps.
+            if (!fullText.contains("blockerop")) return null
+
+            when {
+                fullText.contains("deactivate & uninstall") -> "deactivate-and-uninstall"
+                fullText.contains("deactivate")             -> "deactivate"
+                else -> null
+            }
         } finally {
             root.recycle()
         }
